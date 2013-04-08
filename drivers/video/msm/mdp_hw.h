@@ -236,6 +236,7 @@ void mdp_ppp_dump_debug(const struct mdp_info *mdp);
 #define MDP_DMA_P_COLOR_CORRECT_CONFIG   (0x90070)
 
 #define MDP_LCDC_EN                      (0xe0000)
+#define MDP_LCDC_CTL                     (0xe0000)
 #define MDP_LCDC_HSYNC_CTL               (0xe0004)
 #define MDP_LCDC_VSYNC_PERIOD            (0xe0008)
 #define MDP_LCDC_VSYNC_PULSE_WIDTH       (0xe000c)

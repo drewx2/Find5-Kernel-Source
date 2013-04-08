@@ -15,7 +15,6 @@
 #include "vcd_ddl_metadata.h"
 #include "vcd_ddl_shared_mem.h"
 #include "vcd_core.h"
-#include "vcd_res_tracker_api.h"
 
 #if defined(PIX_CACHE_DISABLE)
 #define DDL_PIX_CACHE_ENABLE  false
@@ -109,9 +108,7 @@ void ddl_vidc_channel_set(struct ddl_client_context *ddl)
 		dec_pix_cache = VIDC_1080P_DECODE_PCACHE_DISABLE;
 	const enum vidc_1080p_encode_p_cache_enable
 		enc_pix_cache = VIDC_1080P_ENCODE_PCACHE_ENABLE;
-	u32 pix_cache_ctrl, ctxt_mem_offset, ctxt_mem_size, arg1 = 0;
-	u8 *hw_ctxt = NULL;
-	struct ion_handle *alloc_handle;
+	u32 pix_cache_ctrl, ctxt_mem_offset, ctxt_mem_size;
 
 	if (ddl->decoding) {
 		ddl_set_core_start_time(__func__, DEC_OP_TIME);
@@ -119,30 +116,15 @@ void ddl_vidc_channel_set(struct ddl_client_context *ddl)
 		pix_cache_ctrl = (u32)dec_pix_cache;
 		ctxt_mem_offset = DDL_ADDR_OFFSET(ddl_context->dram_base_a,
 		ddl->codec_data.decoder.hw_bufs.context) >> 11;
-		hw_ctxt =
-		ddl->codec_data.decoder.hw_bufs.context.align_virtual_addr;
 		ctxt_mem_size =
 			ddl->codec_data.decoder.hw_bufs.context.buffer_size;
-		alloc_handle =
-			ddl->codec_data.decoder.hw_bufs.context.alloc_handle;
 	} else {
 		vcd_codec = &(ddl->codec_data.encoder.codec.codec);
 		pix_cache_ctrl = (u32)enc_pix_cache;
 		ctxt_mem_offset = DDL_ADDR_OFFSET(ddl_context->dram_base_a,
 			ddl->codec_data.encoder.hw_bufs.context) >> 11;
-		hw_ctxt =
-		ddl->codec_data.encoder.hw_bufs.context.align_virtual_addr;
 		ctxt_mem_size =
 			ddl->codec_data.encoder.hw_bufs.context.buffer_size;
-		alloc_handle =
-			ddl->codec_data.encoder.hw_bufs.context.alloc_handle;
-	}
-	if (!res_trk_check_for_sec_session() && hw_ctxt) {
-		memset(hw_ctxt, 0, ctxt_mem_size);
-		msm_ion_do_cache_op(ddl_context->video_ion_client,
-		alloc_handle, hw_ctxt, ctxt_mem_size,
-		ION_IOC_CLEAN_INV_CACHES);
-		arg1 = 1 << 29;
 	}
 	switch (*vcd_codec) {
 	default:
@@ -202,9 +184,8 @@ void ddl_vidc_channel_set(struct ddl_client_context *ddl)
 	DDL_MSG_LOW("ddl_state_transition: %s ~~> DDL_CLIENT_WAIT_FOR_CHDONE",
 	ddl_get_state_string(ddl->client_state));
 	ddl->client_state = DDL_CLIENT_WAIT_FOR_CHDONE;
-	arg1 |= (u32)codec;
 	vidc_1080p_set_host2risc_cmd(VIDC_1080P_HOST2RISC_CMD_OPEN_CH,
-		arg1, pix_cache_ctrl, ctxt_mem_offset,
+		(u32)codec, pix_cache_ctrl, ctxt_mem_offset,
 		ctxt_mem_size);
 }
 
@@ -399,7 +380,7 @@ static void ddl_vidc_encode_set_profile_level(
 		encode_profile = VIDC_1080P_PROFILE_MPEG4_ADV_SIMPLE;
 	break;
 	case VCD_PROFILE_H264_BASELINE:
-		encode_profile = VIDC_1080P_PROFILE_H264_BASELINE;
+		encode_profile = VIDC_1080P_PROFILE_H264_CONSTRAINED_BASELINE;
 	break;
 	case VCD_PROFILE_H264_MAIN:
 		encode_profile = VIDC_1080P_PROFILE_H264_MAIN;
@@ -886,6 +867,7 @@ void ddl_vidc_encode_slice_batch_run(struct ddl_client_context *ddl)
 	DDL_MEMSET(encoder->batch_frame.slice_batch_in.align_virtual_addr, 0,
 		sizeof(struct vidc_1080p_enc_slice_batch_in_param));
 	encoder->batch_frame.out_frm_next_frmindex = 0;
+	encoder->batch_frame.first_output_frame_tag = 0;
 	bitstream_size = encoder->batch_frame.output_frame[0].vcd_frm.alloc_len;
 	encoder->output_buf_req.sz = bitstream_size;
 	y_addr = DDL_OFFSET(ddl_context->dram_base_b.align_physical_addr,
@@ -978,7 +960,6 @@ void ddl_vidc_encode_slice_batch_run(struct ddl_client_context *ddl)
 		ddl_update_core_start_time(__func__, ENC_SLICE_OP_TIME);
 		ddl_set_core_start_time(__func__, ENC_OP_TIME);
 	}
-	encoder->num_slices_comp = 0;
 	ddl_vidc_encode_set_batch_slice_info(ddl);
 	ddl_context->vidc_encode_slice_batch_start[ddl->command_channel] (
 			&enc_param);

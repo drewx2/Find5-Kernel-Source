@@ -38,21 +38,11 @@
 #include <mach/clk.h>
 #include "mdp.h"
 #include "msm_fb.h"
-/* OPPO 2012-12-26 zhengzk Add begin for fix mdp underrun */
-#define FORBID_POWER_COLLAPSE
-/* OPPO 2012-12-26 zhengzk Add end */
 #ifdef CONFIG_FB_MSM_MDP40
 #include "mdp4.h"
 #endif
 #include "mipi_dsi.h"
 
-/* OPPO 2012-12-26 zhengzk Add begin for reason */
-#ifdef FORBID_POWER_COLLAPSE
-#include <linux/pm_qos.h>
-#define MDP_LATENCY	1300
-struct pm_qos_request mdp_pm_qos_req_dma;
-#endif
-/* OPPO 2012-12-26 zhengzk Add end */
 uint32 mdp4_extn_disp;
 
 static struct clk *mdp_clk;
@@ -60,10 +50,10 @@ static struct clk *mdp_pclk;
 static struct clk *mdp_lut_clk;
 int mdp_rev;
 int mdp_iommu_split_domain;
-u32 mdp_max_clk = 200000000;
+u32 mdp_max_clk = 266667000;
 
 static struct platform_device *mdp_init_pdev;
-static struct regulator *footswitch, *dsi_pll_vdda, *dsi_pll_vddio;
+static struct regulator *footswitch;
 static unsigned int mdp_footswitch_on;
 
 struct completion mdp_ppp_comp;
@@ -491,6 +481,7 @@ error:
 
 DEFINE_MUTEX(mdp_lut_push_sem);
 static int mdp_lut_i;
+
 static int mdp_lut_hw_update(struct fb_cmap *cmap)
 {
 	int i;
@@ -528,9 +519,7 @@ static int mdp_lut_update_nonlcdc(struct fb_info *info, struct fb_cmap *cmap)
 	int ret;
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	mdp_clk_ctrl(1);
 	ret = mdp_lut_hw_update(cmap);
-	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	if (ret)
@@ -552,11 +541,9 @@ static int mdp_lut_update_lcdc(struct fb_info *info, struct fb_cmap *cmap)
 	uint32_t out;
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	mdp_clk_ctrl(1);
 	ret = mdp_lut_hw_update(cmap);
 
 	if (ret) {
-		mdp_clk_ctrl(0);
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 		return ret;
 	}
@@ -564,12 +551,46 @@ static int mdp_lut_update_lcdc(struct fb_info *info, struct fb_cmap *cmap)
 	/*mask off non LUT select bits*/
 	out = inpdw(MDP_BASE + 0x90070) & ~((0x1 << 10) | 0x7);
 	MDP_OUTP(MDP_BASE + 0x90070, (mdp_lut_i << 10) | 0x7 | out);
-	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_lut_i = (mdp_lut_i + 1)%2;
 
 	return 0;
 }
+
+#ifdef CONFIG_UPDATE_LCDC_LUT
+int mdp_preset_lut_update_lcdc(struct fb_cmap *cmap, uint32_t *internal_lut)
+{
+	uint32_t out;
+	int i;
+	u16 r, g, b;
+
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+	for (i = 0; i < cmap->len; i++) {
+		r = lut2r(internal_lut[i]);
+		g = lut2g(internal_lut[i]);
+		b = lut2b(internal_lut[i]);
+#ifdef CONFIG_LCD_KCAL
+		r = scaled_by_kcal(r, *(cmap->red));
+		g = scaled_by_kcal(g, *(cmap->green));
+		b = scaled_by_kcal(b, *(cmap->blue));
+#endif
+		MDP_OUTP(MDP_BASE + 0x94800 +
+			(0x400*mdp_lut_i) + cmap->start*4 + i*4,
+				((g & 0xff) |
+				 ((b & 0xff) << 8) |
+				 ((r & 0xff) << 16)));
+	}
+
+	/*mask off non LUT select bits*/
+	out = inpdw(MDP_BASE + 0x90070) & ~((0x1 << 10) | 0x7);
+	MDP_OUTP(MDP_BASE + 0x90070, (mdp_lut_i << 10) | 0x7 | out);
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	mdp_lut_i = (mdp_lut_i + 1)%2;
+
+	return 0;
+}
+#endif
 
 static void mdp_lut_enable(void)
 {
@@ -621,7 +642,7 @@ static void mdp_hist_read_work(struct work_struct *data);
 
 static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 {
-	uint32_t bins, extra, index, intr = 0, term = 0;
+	uint32_t bins, extra, index, term = 0;
 	init_completion(&mgmt->mdp_hist_comp);
 	mutex_init(&mgmt->mdp_hist_mutex);
 	mutex_init(&mgmt->mdp_do_hist_mutex);
@@ -637,8 +658,6 @@ static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 	switch (block) {
 	case MDP_BLOCK_DMA_P:
 		term = MDP_HISTOGRAM_TERM_DMA_P;
-		intr = (mdp_rev >= MDP_REV_40) ? INTR_DMA_P_HISTOGRAM :
-								MDP_HIST_DONE;
 		bins = (mdp_rev >= MDP_REV_42) ? MDP_REV42_HIST_MAX_BIN :
 			MDP_REV41_HIST_MAX_BIN;
 		extra = 2;
@@ -647,7 +666,6 @@ static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 		break;
 	case MDP_BLOCK_DMA_S:
 		term = MDP_HISTOGRAM_TERM_DMA_S;
-		intr = INTR_DMA_S_HISTOGRAM;
 		bins = MDP_REV42_HIST_MAX_BIN;
 		extra = 2;
 		mgmt->base += 0x5000;
@@ -655,7 +673,6 @@ static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 		break;
 	case MDP_BLOCK_VG_1:
 		term = MDP_HISTOGRAM_TERM_VG_1;
-		intr = INTR_VG1_HISTOGRAM;
 		bins = MDP_REV42_HIST_MAX_BIN;
 		extra = 1;
 		mgmt->base += 0x6000;
@@ -663,7 +680,6 @@ static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 		break;
 	case MDP_BLOCK_VG_2:
 		term = MDP_HISTOGRAM_TERM_VG_2;
-		intr = INTR_VG2_HISTOGRAM;
 		bins = MDP_REV42_HIST_MAX_BIN;
 		extra = 1;
 		mgmt->base += 0x6000;
@@ -671,8 +687,6 @@ static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 		break;
 	default:
 		term = MDP_HISTOGRAM_TERM_DMA_P;
-		intr = (mdp_rev >= MDP_REV_40) ? INTR_DMA_P_HISTOGRAM :
-								MDP_HIST_DONE;
 		bins = (mdp_rev >= MDP_REV_42) ? MDP_REV42_HIST_MAX_BIN :
 			MDP_REV41_HIST_MAX_BIN;
 		extra = 2;
@@ -680,7 +694,6 @@ static int mdp_hist_init_mgmt(struct mdp_hist_mgmt *mgmt, uint32_t block)
 		index = MDP_HIST_MGMT_DMA_P;
 	}
 	mgmt->irq_term = term;
-	mgmt->intr = intr;
 
 	mgmt->c0 = kmalloc(bins * sizeof(uint32_t), GFP_KERNEL);
 	if (mgmt->c0 == NULL)
@@ -825,44 +838,19 @@ int mdp_histogram_block2mgmt(uint32_t block, struct mdp_hist_mgmt **mgmt)
 static int mdp_histogram_enable(struct mdp_hist_mgmt *mgmt)
 {
 	uint32_t base;
-	unsigned long flag;
 	if (mgmt->mdp_is_hist_data == TRUE) {
 		pr_err("%s histogram already started\n", __func__);
 		return -EINVAL;
 	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	base = (uint32_t) (MDP_BASE + mgmt->base);
-	/*First make sure that device is not collecting histogram*/
-	mgmt->mdp_is_hist_data = FALSE;
-	mgmt->mdp_is_hist_valid = FALSE;
-	mgmt->mdp_is_hist_init = FALSE;
-	spin_lock_irqsave(&mdp_spin_lock, flag);
-	outp32(MDP_INTR_CLEAR, mgmt->intr);
-	mdp_intr_mask &= ~mgmt->intr;
-	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
-	MDP_OUTP(base + 0x001C, 0);
-	MDP_OUTP(base + 0x0018, INTR_HIST_DONE | INTR_HIST_RESET_SEQ_DONE);
-	MDP_OUTP(base + 0x0024, 0);
-	spin_unlock_irqrestore(&mdp_spin_lock, flag);
-
-	mutex_unlock(&mgmt->mdp_hist_mutex);
-	cancel_work_sync(&mgmt->mdp_histogram_worker);
-	mutex_lock(&mgmt->mdp_hist_mutex);
-
-	/*Then initialize histogram*/
+	mdp_enable_irq(mgmt->irq_term);
 	INIT_COMPLETION(mgmt->mdp_hist_comp);
 
-	spin_lock_irqsave(&mdp_spin_lock, flag);
+	base = (uint32_t) (MDP_BASE + mgmt->base);
 	MDP_OUTP(base + 0x0018, INTR_HIST_DONE | INTR_HIST_RESET_SEQ_DONE);
 	MDP_OUTP(base + 0x0010, 1);
 	MDP_OUTP(base + 0x001C, INTR_HIST_DONE | INTR_HIST_RESET_SEQ_DONE);
-
-	outp32(MDP_INTR_CLEAR, mgmt->intr);
-	mdp_intr_mask |= mgmt->intr;
-	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
-	mdp_enable_irq(mgmt->irq_term);
-	spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
 	MDP_OUTP(base + 0x0004, mgmt->frame_cnt);
 	if (mgmt->block != MDP_BLOCK_VG_1 && mgmt->block != MDP_BLOCK_VG_2)
@@ -878,7 +866,6 @@ static int mdp_histogram_enable(struct mdp_hist_mgmt *mgmt)
 static int mdp_histogram_disable(struct mdp_hist_mgmt *mgmt)
 {
 	uint32_t base, status;
-	unsigned long flag;
 	if (mgmt->mdp_is_hist_data == FALSE) {
 		pr_err("%s histogram already stopped\n", __func__);
 		return -EINVAL;
@@ -891,13 +878,6 @@ static int mdp_histogram_disable(struct mdp_hist_mgmt *mgmt)
 	base = (uint32_t) (MDP_BASE + mgmt->base);
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	spin_lock_irqsave(&mdp_spin_lock, flag);
-	outp32(MDP_INTR_CLEAR, mgmt->intr);
-	mdp_intr_mask &= ~mgmt->intr;
-	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
-	mdp_disable_irq(mgmt->irq_term);
-	spin_unlock_irqrestore(&mdp_spin_lock, flag);
-
 	if (mdp_rev >= MDP_REV_42)
 		MDP_OUTP(base + 0x0020, 1);
 	status = inpdw(base + 0x001C);
@@ -912,6 +892,7 @@ static int mdp_histogram_disable(struct mdp_hist_mgmt *mgmt)
 		complete(&mgmt->mdp_hist_comp);
 	}
 
+	mdp_disable_irq(mgmt->irq_term);
 	return 0;
 }
 
@@ -1081,7 +1062,6 @@ static int _mdp_histogram_read_dma_data(struct mdp_hist_mgmt *mgmt)
 	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	mdp_clk_ctrl(1);
 	for (i = 0; i < mgmt->num_bins; i++) {
 		mgmt->c0[i] = inpdw(mdp_hist_base + r_data_offset + (4*i));
 		mgmt->c1[i] = inpdw(mdp_hist_base + g_data_offset + (4*i));
@@ -1097,7 +1077,6 @@ static int _mdp_histogram_read_dma_data(struct mdp_hist_mgmt *mgmt)
 		} else
 			ret = -ENOMEM;
 	}
-	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	if (!ret)
@@ -1133,7 +1112,6 @@ static int _mdp_histogram_read_vg_data(struct mdp_hist_mgmt *mgmt)
 	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	mdp_clk_ctrl(1);
 	for (i = 0; i < mgmt->num_bins; i++)
 		mgmt->c0[i] = inpdw(mdp_hist_base + MDP_HIST_DATA_LUMA_OFF +
 									(4*i));
@@ -1145,7 +1123,6 @@ static int _mdp_histogram_read_vg_data(struct mdp_hist_mgmt *mgmt)
 		} else
 			ret = -ENOMEM;
 	}
-	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	if (!ret)
@@ -1161,7 +1138,6 @@ static void mdp_hist_read_work(struct work_struct *data)
 	struct mdp_hist_mgmt *mgmt = container_of(data, struct mdp_hist_mgmt,
 							mdp_histogram_worker);
 	int ret = 0;
-	bool hist_ready;
 	mutex_lock(&mgmt->mdp_hist_mutex);
 	if (mgmt->mdp_is_hist_data == FALSE) {
 		pr_debug("%s, Histogram disabled before read.\n", __func__);
@@ -1176,9 +1152,8 @@ static void mdp_hist_read_work(struct work_struct *data)
 			pr_err("mgmt->hist invalid NULL\n");
 		ret = -EINVAL;
 	}
-	hist_ready = (mgmt->mdp_is_hist_init && mgmt->mdp_is_hist_valid);
 
-	if (!ret && hist_ready) {
+	if (!ret) {
 		switch (mgmt->block) {
 		case MDP_BLOCK_DMA_P:
 		case MDP_BLOCK_DMA_S:
@@ -1199,7 +1174,7 @@ static void mdp_hist_read_work(struct work_struct *data)
 	 * if read was triggered by an underrun or failed copying,
 	 * don't wake up readers
 	 */
-	if (!ret && hist_ready) {
+	if (!ret && mgmt->mdp_is_hist_valid && mgmt->mdp_is_hist_init) {
 		mgmt->hist = NULL;
 		if (waitqueue_active(&mgmt->mdp_hist_comp.wait))
 			complete(&mgmt->mdp_hist_comp);
@@ -1211,7 +1186,7 @@ static void mdp_hist_read_work(struct work_struct *data)
 			mgmt->mdp_is_hist_init = TRUE;
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	if (!ret && hist_ready)
+	if (!ret)
 		__mdp_histogram_kickoff(mgmt);
 	else
 		__mdp_histogram_reset(mgmt);
@@ -1344,6 +1319,34 @@ static void send_vsync_work(struct work_struct *work)
 	envp[0] = buf;
 	envp[1] = NULL;
 	kobject_uevent_env(&(vsync_cntrl.dev->kobj), KOBJ_CHANGE, envp);
+}
+
+void mdp3_vsync_irq_enable(int intr, int term)
+{
+	unsigned long flag;
+
+	spin_lock_irqsave(&mdp_spin_lock, flag);
+	outp32(MDP_INTR_CLEAR, intr);
+	mdp_intr_mask |= intr;
+	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
+	mdp_enable_irq(term);
+	spin_unlock_irqrestore(&mdp_spin_lock, flag);
+}
+
+void mdp3_vsync_irq_disable(int intr, int term)
+{
+	unsigned long flag;
+
+	spin_lock_irqsave(&mdp_spin_lock, flag);
+	/* required to synchronize between frame update and vsync
+	 * since both use the same LCDC_FRAME_START interrupt
+	 */
+	if (intr == LCDC_FRAME_START && dma2_data.waiting == FALSE) {
+		mdp_intr_mask &= ~intr;
+		outp32(MDP_INTR_ENABLE, mdp_intr_mask);
+	}
+	mdp_disable_irq(term);
+	spin_unlock_irqrestore(&mdp_spin_lock, flag);
 }
 
 #ifdef CONFIG_FB_MSM_MDP303
@@ -1512,15 +1515,12 @@ void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 		outpdw(MDP_BASE + 0x0014, 0x0);	/* start DMA */
 	} else if (term == MDP_OVERLAY0_TERM) {
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-		mdp_lut_enable();
 		outpdw(MDP_BASE + 0x0004, 0);
 	} else if (term == MDP_OVERLAY1_TERM) {
 		mdp_pipe_ctrl(MDP_OVERLAY1_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-		mdp_lut_enable();
 		outpdw(MDP_BASE + 0x0008, 0);
 	} else if (term == MDP_OVERLAY2_TERM) {
 		mdp_pipe_ctrl(MDP_OVERLAY2_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-		mdp_lut_enable();
 		outpdw(MDP_BASE + 0x00D0, 0);
 	}
 #else
@@ -1791,8 +1791,10 @@ void mdp_histogram_handle_isr(struct mdp_hist_mgmt *mgmt)
 	isr &= mask;
 	if (isr & INTR_HIST_RESET_SEQ_DONE)
 		__mdp_histogram_kickoff(mgmt);
-	else if (isr & INTR_HIST_DONE)
+
+	if (isr & INTR_HIST_DONE) {
 		queue_work(mdp_hist_wq, &mgmt->mdp_histogram_worker);
+	}
 }
 
 #ifndef CONFIG_FB_MSM_MDP40
@@ -1802,8 +1804,8 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 	struct mdp_dma_data *dma;
 	unsigned long flag;
 	struct mdp_hist_mgmt *mgmt = NULL;
+	char *base_addr;
 	int i, ret;
-	int vsync_isr;
 	/* Ensure all the register write are complete */
 	mb();
 
@@ -1823,23 +1825,8 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 		goto out;
 
 	/*Primary Vsync interrupt*/
-	if (mdp_interrupt & MDP_PRIM_RDPTR) {
-		spin_lock_irqsave(&mdp_spin_lock, flag);
-		vsync_isr = vsync_cntrl.vsync_irq_enabled;
-		if (!vsync_isr) {
-			mdp_intr_mask &= ~MDP_PRIM_RDPTR;
-			outp32(MDP_INTR_ENABLE, mdp_intr_mask);
-		}
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-
-		if (vsync_isr) {
-			vsync_isr_handler();
-		} else {
-			mdp_pipe_ctrl(MDP_CMD_BLOCK,
-				MDP_BLOCK_POWER_OFF, TRUE);
-			complete(&vsync_cntrl.vsync_wait);
-		}
-	}
+	if (mdp_interrupt & MDP_PRIM_RDPTR)
+		vsync_isr_handler();
 
 	/* DMA3 TV-Out Start */
 	if (mdp_interrupt & TV_OUT_DMA3_START) {
@@ -1873,7 +1860,13 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 				mgmt = mdp_hist_mgmt_array[i];
 				if (!mgmt)
 					continue;
+
+				base_addr = MDP_BASE + mgmt->base;
+				outpdw(base_addr + 0x010, 1);
+				outpdw(base_addr + 0x01C, INTR_HIST_DONE |
+						INTR_HIST_RESET_SEQ_DONE);
 				mgmt->mdp_is_hist_valid = FALSE;
+				__mdp_histogram_reset(mgmt);
 			}
 		}
 
@@ -1881,26 +1874,21 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 		if (mdp_interrupt & LCDC_FRAME_START) {
 			dma = &dma2_data;
 			spin_lock_irqsave(&mdp_spin_lock, flag);
-			vsync_isr = vsync_cntrl.vsync_irq_enabled;
 			/* let's disable LCDC interrupt */
 			if (dma->waiting) {
 				dma->waiting = FALSE;
 				complete(&dma->comp);
 			}
 
-			if (!vsync_isr) {
+			if (vsync_cntrl.vsync_irq_enabled)
+				vsync_isr_handler();
+
+			if (!vsync_cntrl.vsync_irq_enabled && !(dma->waiting)) {
 				mdp_intr_mask &= ~LCDC_FRAME_START;
 				outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 			}
-			spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
-			if (vsync_isr) {
-				vsync_isr_handler();
-			} else {
-				mdp_pipe_ctrl(MDP_CMD_BLOCK,
-					MDP_BLOCK_POWER_OFF, TRUE);
-				complete(&vsync_cntrl.vsync_wait);
-			}
+			spin_unlock_irqrestore(&mdp_spin_lock, flag);
 		}
 
 		/* DMA2 LCD-Out Complete */
@@ -2031,7 +2019,6 @@ static void mdp_drv_init(void)
 		atomic_set(&mdp_block_power_cnt[i], 0);
 	}
 	INIT_WORK(&(vsync_cntrl.vsync_work), send_vsync_work);
-	init_completion(&vsync_cntrl.vsync_wait);
 #ifdef MSM_FB_ENABLE_DBGFS
 	{
 		struct dentry *root;
@@ -2070,28 +2057,6 @@ static void mdp_drv_init(void)
 	}
 #endif
 }
-
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-#ifdef CONFIG_VENDOR_EDIT	
-
-#ifdef SPLASH_SCREEN_BUFFER_FOR_1080P
-struct disp_logo_buffer {
-	dma_addr_t phys;
-	void       *data;
-	uint32_t   used;
-	uint32_t   size;/* size of buffer */
-	struct ion_handle *handle;
-	struct ion_client *client;
-};
-
-struct disp_logo_buffer logo_buffer;
-
-static void free_boot_logo_copy_buffer(void);
-static int alloc_boot_logo_copy_buffer(unsigned int bufsz);
-#endif
-
-#endif
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
 
 static int mdp_probe(struct platform_device *pdev);
 static int mdp_remove(struct platform_device *pdev);
@@ -2197,6 +2162,7 @@ static int mdp_on(struct platform_device *pdev)
 		}
 
 		mdp_clk_ctrl(0);
+		mdp4_overlay_reset();
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	}
 
@@ -2207,6 +2173,8 @@ static int mdp_on(struct platform_device *pdev)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
 	ret = panel_next_on(pdev);
+	if (mfd->panel.type == MIPI_VIDEO_PANEL)
+		mdp4_overlay_dsi_video_start();
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	mdp_histogram_ctrl_all(TRUE);
@@ -2320,40 +2288,18 @@ static int mdp_irq_clk_setup(struct platform_device *pdev,
 	}
 	disable_irq(mdp_irq);
 
-	dsi_pll_vdda = regulator_get(&pdev->dev, "dsi_pll_vdda");
-	if (IS_ERR(dsi_pll_vdda)) {
-		dsi_pll_vdda = NULL;
-	} else {
-		if (mdp_rev == MDP_REV_42 || mdp_rev == MDP_REV_44) {
-			ret = regulator_set_voltage(dsi_pll_vdda, 1200000,
-				1200000);
-			if (ret) {
-				pr_err("set_voltage failed for dsi_pll_vdda, ret=%d\n",
-					ret);
-			}
-		}
-	}
-
-	dsi_pll_vddio = regulator_get(&pdev->dev, "dsi_pll_vddio");
-	if (IS_ERR(dsi_pll_vddio)) {
-		dsi_pll_vddio = NULL;
-	} else {
-		if (mdp_rev == MDP_REV_42) {
-			ret = regulator_set_voltage(dsi_pll_vddio, 1800000,
-				1800000);
-			if (ret) {
-				pr_err("set_voltage failed for dsi_pll_vddio, ret=%d\n",
-					ret);
-			}
-		}
-	}
-
 	footswitch = regulator_get(&pdev->dev, "vdd");
-	if (IS_ERR(footswitch)) {
+	if (IS_ERR(footswitch))
 		footswitch = NULL;
-	} else {
+	else {
 		regulator_enable(footswitch);
 		mdp_footswitch_on = 1;
+
+		if (mdp_rev == MDP_REV_42 && !cont_splashScreen) {
+			regulator_disable(footswitch);
+			msleep(20);
+			regulator_enable(footswitch);
+		}
 	}
 
 	mdp_clk = clk_get(&pdev->dev, "core_clk");
@@ -2404,105 +2350,8 @@ static int mdp_irq_clk_setup(struct platform_device *pdev,
 
 	MSM_FB_DEBUG("mdp_clk: mdp_clk=%d\n", (int)clk_get_rate(mdp_clk));
 #endif
-
-	if (mdp_rev == MDP_REV_42 && !cont_splashScreen) {
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-		/* DSI Video Timing generator disable */
-		outpdw(MDP_BASE + 0xE0000, 0x0);
-		/* Clear MDP Interrupt Enable register */
-		outpdw(MDP_BASE + 0x50, 0x0);
-		/* Set Overlay Proc 0 to reset state */
-		outpdw(MDP_BASE + 0x10004, 0x3);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-	}
 	return 0;
 }
-
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-#ifdef CONFIG_VENDOR_EDIT	
-
-#ifdef SPLASH_SCREEN_BUFFER_FOR_1080P
-static void free_boot_logo_copy_buffer(void)
-{
-	pr_debug("%s++\n", __func__);
-
-	if (logo_buffer.data) {
-		logo_buffer.used = 0;
-		ion_unmap_kernel(logo_buffer.client, logo_buffer.handle);
-		ion_free(logo_buffer.client, logo_buffer.handle);
-		ion_client_destroy(logo_buffer.client);
-		pr_debug("%s:data[%p]phys[%p][%p], client[%p] handle[%p]\n",
-			__func__,
-			(void *)logo_buffer.data,
-			(void *)logo_buffer.phys,
-			(void *)&logo_buffer.phys,
-			(void *)logo_buffer.client,
-			(void *)logo_buffer.handle);
-	}
-
-		logo_buffer.data = NULL;
-		logo_buffer.phys = 0;
-	pr_debug("%s--\n", __func__);
-	return;
-}
-
-
-static int alloc_boot_logo_copy_buffer(unsigned int bufsz)
-{
-	int rc = 0;
-	int len = 0;
-
-	pr_debug("alloc_boot_logo_copy_buffer++\n");
-	logo_buffer.client =
-		 msm_ion_client_create(UINT_MAX, "boot_logo_copy_client");
-	if (IS_ERR_OR_NULL((void *)logo_buffer.client)) {
-		pr_err("%s: ION create client for boot_logo_copy failed\n",
-			 __func__);
-		goto fail;
-	}
-	logo_buffer.handle = ion_alloc(logo_buffer.client, bufsz * 1, SZ_4K,
-				  ION_HEAP(ION_QSECOM_HEAP_ID));
-	if (IS_ERR_OR_NULL((void *) logo_buffer.handle)) {
-		pr_err("%s: ION memory allocation for boot_logo_copy failed\n",
-			__func__);
-		goto fail;
-	}
-
-	rc = ion_phys(logo_buffer.client, logo_buffer.handle,
-		  (ion_phys_addr_t *)&logo_buffer.phys, (size_t *)&len);
-	if (rc) {
-		pr_err("%s: ION Get Phys for boot_logo_copy failed, rc = %d\n",
-			__func__, rc);
-		goto fail;
-	}
-
-	logo_buffer.data = ion_map_kernel(logo_buffer.client,
-				 logo_buffer.handle, 0);
-	if (IS_ERR_OR_NULL((void *) logo_buffer.data)) {
-		pr_err("%s: ION memory mapping for boot_logo_copy failed\n",
-				 __func__);
-		goto fail;
-	}
-	memset((void *)logo_buffer.data, 0, (bufsz * 1));
-	if (!logo_buffer.data) {
-		pr_err("%s:invalid vaddr, iomap failed\n", __func__);
-		goto fail;
-	}
-
-	logo_buffer.used = 1;
-
-	pr_debug("alloc_boot_logo_copy_buffer--\n");
-
-	return 0;
-fail:
-	free_boot_logo_copy_buffer();
-	return -EINVAL;
-}
-#endif
-
-
-#endif
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
 
 static int mdp_probe(struct platform_device *pdev)
 {
@@ -2519,11 +2368,6 @@ static int mdp_probe(struct platform_device *pdev)
 	struct mipi_panel_info *mipi;
 #endif
 	static int contSplash_update_done;
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-#ifdef CONFIG_VENDOR_EDIT	
-	char *cp;
-#endif
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
 
 	if ((pdev->id == 0) && (pdev->num_resources > 0)) {
 		mdp_init_pdev = pdev;
@@ -2545,15 +2389,6 @@ static int mdp_probe(struct platform_device *pdev)
 		}
 
 		mdp_rev = mdp_pdata->mdp_rev;
-/* OPPO 2012-12-26 zhengzk Add begin for reason */
-#ifdef FORBID_POWER_COLLAPSE
-		pm_qos_add_request(&mdp_pm_qos_req_dma,
-				PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
-		pm_qos_update_request(&mdp_pm_qos_req_dma,
-				MDP_LATENCY + 1);
-		printk ("%s: pm_qos_update_request", __func__);
-#endif
-/* OPPO 2012-12-26 zhengzk Add end */
 		mdp_iommu_split_domain = mdp_pdata->mdp_iommu_split_domain;
 
 		rc = mdp_irq_clk_setup(pdev, mdp_pdata->cont_splash_enabled);
@@ -2561,14 +2396,7 @@ static int mdp_probe(struct platform_device *pdev)
 		if (rc)
 			return rc;
 
-		mdp_clk_ctrl(1);
-
 		mdp_hw_version();
-/* OPPO 2012-12-4 huyu modify for solving wifidisplay crash*/
-#ifdef CONFIG_VENDOR_EDIT		
-		mdp4_overlay_cfg_init(); 
-#endif
-/* OPPO 2012-12-4 huyu modify for solving wifidisplay crash*/
 
 		/* initializing mdp hw */
 #ifdef CONFIG_FB_MSM_MDP40
@@ -2581,14 +2409,6 @@ static int mdp_probe(struct platform_device *pdev)
 #ifdef CONFIG_FB_MSM_OVERLAY
 		mdp_hw_cursor_init();
 #endif
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-#ifndef CONFIG_VENDOR_EDIT
-		mdp_clk_ctrl(0);
-#else
-		if (!(mdp_pdata->cont_splash_enabled))
-			mdp_clk_ctrl(0);
-#endif
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
 		mdp_resource_initialized = 1;
 		return 0;
 	}
@@ -2614,68 +2434,17 @@ static int mdp_probe(struct platform_device *pdev)
 	/* link to the latest pdev */
 	mfd->pdev = msm_fb_dev;
 	mfd->mdp_rev = mdp_rev;
+	mfd->vsync_init = NULL;
 
 	if (mdp_pdata) {
 		if (mdp_pdata->cont_splash_enabled) {
 			mfd->cont_splash_done = 0;
 			if (!contSplash_update_done) {
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-#ifdef CONFIG_VENDOR_EDIT	
-                uint32 bpp = 3;
-				/*read panel wxh and calculate splash screen size*/
-				mdp_pdata->splash_screen_size =
-				inpdw(MDP_BASE + 0x90004);
-				mdp_pdata->splash_screen_size =
-					(((mdp_pdata->splash_screen_size >> 16) &
-					0x00000FFF) * (
-					mdp_pdata->splash_screen_size &
-					0x00000FFF)) * bpp;
-				mdp_pdata->splash_screen_addr =
-					inpdw(MDP_BASE + 0x90008);
-#ifdef SPLASH_SCREEN_BUFFER_FOR_1080P
-					if (alloc_boot_logo_copy_buffer
-							(mdp_pdata->splash_screen_size))
-						pr_err("BUFFER ALLOC FAILED for SPLASH\n");
-					else
-						pr_debug("BUFFER ALLOC Sucessfully done for SPLASH\n");
-	
-					if (logo_buffer.used == 1) {
-						mfd->copy_splash_phys =
-								 logo_buffer.phys;
-						mfd->copy_splash_buf =
-								logo_buffer.data;
-					}
-				
-#else
-
-				mfd->copy_splash_buf = dma_alloc_coherent(NULL,
-					mdp_pdata->splash_screen_size,
-					(dma_addr_t *) &(mfd->copy_splash_phys),
-					GFP_KERNEL);
-#endif
-
-				if (!mfd->copy_splash_buf) {
-					pr_err("DMA ALLOC FAILED for SPLASH\n");
-					return -ENOMEM;
-					}
-					cp = (char *)ioremap(
-						mdp_pdata->splash_screen_addr,
-						mdp_pdata->splash_screen_size);
-					if (!cp) {
-						pr_err("IOREMAP FAILED for SPLASH\n");
-						return -ENOMEM;
-						}
-						memcpy(mfd->copy_splash_buf, cp,
-							mdp_pdata->splash_screen_size);
-						MDP_OUTP(MDP_BASE + 0x90008,
-							mfd->copy_splash_phys);	
-
-#endif					
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-
-				if (mfd->panel.type == MIPI_VIDEO_PANEL)
+				if (mfd->panel.type == MIPI_VIDEO_PANEL ||
+				    mfd->panel.type == LCDC_PANEL)
 					mdp_pipe_ctrl(MDP_CMD_BLOCK,
 						MDP_BLOCK_POWER_ON, FALSE);
+				mdp_clk_ctrl(1);
 				contSplash_update_done = 1;
 			}
 		} else
@@ -2794,7 +2563,7 @@ static int mdp_probe(struct platform_device *pdev)
 	case MIPI_VIDEO_PANEL:
 #ifndef CONFIG_FB_MSM_MDP303
 		mipi = &mfd->panel_info.mipi;
-		mdp4_dsi_vsync_init(0);
+		mfd->vsync_init = mdp4_dsi_vsync_init;
 		mfd->hw_refresh = TRUE;
 		mfd->dma_fnc = mdp4_dsi_video_overlay;
 		mfd->lut_update = mdp_lut_update_lcdc;
@@ -2838,7 +2607,7 @@ static int mdp_probe(struct platform_device *pdev)
 #ifndef CONFIG_FB_MSM_MDP303
 		mfd->dma_fnc = mdp4_dsi_cmd_overlay;
 		mipi = &mfd->panel_info.mipi;
-		mdp4_dsi_rdptr_init(0);
+		mfd->vsync_init = mdp4_dsi_rdptr_init;
 		if (mfd->panel_info.pdest == DISPLAY_1) {
 			if_no = PRIMARY_INTF_SEL;
 			mfd->dma = &dma2_data;
@@ -2882,13 +2651,16 @@ static int mdp_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_FB_MSM_DTV
 	case DTV_PANEL:
-		mdp4_dtv_vsync_init(0);
+		mfd->vsync_init = mdp4_dtv_vsync_init;
 		pdata->on = mdp4_dtv_on;
 		pdata->off = mdp4_dtv_off;
 		mfd->hw_refresh = TRUE;
 		mfd->cursor_update = mdp_hw_cursor_update;
 		mfd->dma_fnc = mdp4_dtv_overlay;
 		mfd->dma = &dma_e_data;
+		mfd->do_histogram = mdp_do_histogram;
+		mfd->start_histogram = mdp_histogram_start;
+		mfd->stop_histogram = mdp_histogram_stop;
 		mdp4_display_intf_sel(EXTERNAL_INTF_SEL, DTV_INTF);
 		break;
 #endif
@@ -2918,7 +2690,7 @@ static int mdp_probe(struct platform_device *pdev)
 #endif
 
 #ifdef CONFIG_FB_MSM_MDP40
-		mdp4_lcdc_vsync_init(0);
+		mfd->vsync_init = mdp4_lcdc_vsync_init;
 		if (mfd->panel.type == HDMI_PANEL) {
 			mfd->dma = &dma_e_data;
 			mdp4_display_intf_sel(EXTERNAL_INTF_SEL, LCDC_RGB_INTF);
@@ -3023,6 +2795,8 @@ static int mdp_probe(struct platform_device *pdev)
 
 	pdev_list[pdev_list_cnt++] = pdev;
 	mdp4_extn_disp = 0;
+	if (mfd->vsync_init != NULL)
+		mfd->vsync_init(0, mfd);
 	return 0;
 
       mdp_probe_err:
@@ -3044,17 +2818,6 @@ void mdp_footswitch_ctrl(boolean on)
 		return;
 	}
 
-	if (dsi_pll_vddio)
-		regulator_enable(dsi_pll_vddio);
-
-	if (dsi_pll_vdda)
-		regulator_enable(dsi_pll_vdda);
-
-	mipi_dsi_prepare_clocks();
-	mipi_dsi_ahb_ctrl(1);
-	mipi_dsi_phy_ctrl(1);
-	mipi_dsi_clk_enable();
-
 	if (on && !mdp_footswitch_on) {
 		pr_debug("Enable MDP FS\n");
 		regulator_enable(footswitch);
@@ -3065,40 +2828,8 @@ void mdp_footswitch_ctrl(boolean on)
 		mdp_footswitch_on = 0;
 	}
 
-	mipi_dsi_clk_disable();
-	mipi_dsi_phy_ctrl(0);
-	mipi_dsi_ahb_ctrl(0);
-	mipi_dsi_unprepare_clocks();
-
-	if (dsi_pll_vdda)
-		regulator_disable(dsi_pll_vdda);
-
-	if (dsi_pll_vddio)
-		regulator_disable(dsi_pll_vddio);
-
 	mutex_unlock(&mdp_suspend_mutex);
 }
-
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
-#ifdef CONFIG_VENDOR_EDIT	
-void mdp_free_splash_buffer(struct msm_fb_data_type *mfd)
-{
-if (mfd->copy_splash_buf) {
-	
-#ifdef SPLASH_SCREEN_BUFFER_FOR_1080P
-			free_boot_logo_copy_buffer();
-#else
-		dma_free_coherent(NULL, mdp_pdata->splash_screen_size,
-			mfd->copy_splash_buf,
-			(dma_addr_t) mfd->copy_splash_phys);
-#endif
-
-	mfd->copy_splash_buf = NULL;
-		}
-}
-
-#endif
-/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
 
 #ifdef CONFIG_PM
 static void mdp_suspend_sub(void)
@@ -3173,13 +2904,6 @@ static int mdp_remove(struct platform_device *pdev)
 		mdp_bus_scale_handle > 0)
 		msm_bus_scale_unregister_client(mdp_bus_scale_handle);
 #endif
-/* OPPO 2012-12-26 zhengzk Add begin for reason */
-#ifdef FORBID_POWER_COLLAPSE
-	pm_qos_update_request(&mdp_pm_qos_req_dma,
-			PM_QOS_DEFAULT_VALUE);
-	printk ("%s: pm_qos_update_request", __func__);
-#endif
-/* OPPO 2012-12-26 zhengzk Add end */
 	return 0;
 }
 

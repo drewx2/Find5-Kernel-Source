@@ -305,6 +305,7 @@ static int __devinit mipi_orise_lcd_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	pr_info("%s finished\n", __func__);
 	return 0;
 }
 

@@ -158,12 +158,10 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_VENDOR_EDIT
-/* DuYuanHua@OnLineRD.AirService.MDM, 2012/12/04, Add for CR401598 Communicate MDM A5 thru' SYSMON */
 /**
  * sysmon_send_shutdown() - send shutdown command to a
  * subsystem.
- * @dest_ss:   ID of subsystem to send to.
+ * @dest_ss:	ID of subsystem to send to.
  *
  * Returns 0 for success, -EINVAL for an invalid destination, -ENODEV if
  * the SMD transport channel is not open, -ETIMEDOUT if the destination
@@ -172,30 +170,28 @@ out:
  *
  * If CONFIG_MSM_SYSMON_COMM is not defined, always return success (0).
  */
- int sysmon_send_shutdown(enum subsys_id dest_ss)
+int sysmon_send_shutdown(enum subsys_id dest_ss)
 {
-       struct sysmon_subsys *ss = &subsys[dest_ss];
-       const char tx_buf[] = "system:shutdown";
-       const char expect[] = "system:ack";
-       size_t prefix_len = ARRAY_SIZE(expect) - 1;
-       int ret;
-	   
-       if (dest_ss < 0 || dest_ss >= SYSMON_NUM_SS)
-               return -EINVAL;
+	struct sysmon_subsys *ss = &subsys[dest_ss];
+	const char tx_buf[] = "system:shutdown";
+	const char expect[] = "system:ack";
+	size_t prefix_len = ARRAY_SIZE(expect) - 1;
+	int ret;
 
-       mutex_lock(&ss->lock);
-       ret = sysmon_send_msg(ss, tx_buf, ARRAY_SIZE(tx_buf));
-	   
-       if (ret)
-               goto out;
-	   
-       if (strncmp(ss->rx_buf, expect, prefix_len))
-               ret = -ENOSYS;
+	if (dest_ss < 0 || dest_ss >= SYSMON_NUM_SS)
+		return -EINVAL;
+
+	mutex_lock(&ss->lock);
+	ret = sysmon_send_msg(ss, tx_buf, ARRAY_SIZE(tx_buf));
+	if (ret)
+		goto out;
+
+	if (strncmp(ss->rx_buf, expect, prefix_len))
+		ret = -ENOSYS;
 out:
-       mutex_unlock(&ss->lock);
-       return ret;
+	mutex_unlock(&ss->lock);
+	return ret;
 }
-#endif /* CONFIG_VENDOR_EDIT */
 
 /**
  * sysmon_get_reason() - Retrieve failure reason from a subsystem.

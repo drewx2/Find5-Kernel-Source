@@ -549,10 +549,7 @@ static struct memtype_reserve apq8064_reserve_table[] __initdata = {
 static void __init reserve_rtb_memory(void)
 {
 #if defined(CONFIG_MSM_RTB)
-/* OPPO 2003-01-17 Van modified begin for FTM test no need rtb_memory */
-	if (!strstr(boot_command_line,"oppo_ftm_mode=factory2"))
-		apq8064_reserve_table[MEMTYPE_EBI1].size += apq8064_rtb_pdata.size;
-/* OPPO 2003-01-17 Van modified end for FTM test no need rtb_memory */
+	apq8064_reserve_table[MEMTYPE_EBI1].size += apq8064_rtb_pdata.size;
 #endif
 }
 
@@ -2305,10 +2302,10 @@ static struct platform_device msm_tsens_device = {
 
 static struct msm_thermal_data msm_thermal_pdata = {
 	.sensor_id = 7,
-	.poll_ms = 1000,
-	.limit_temp = 60,
-	.temp_hysteresis = 10,
-	.limit_freq = 918000,
+	.poll_ms = 250,
+	.limit_temp_degC = 60,
+	.temp_hysteresis_degC = 10,
+	.freq_step = 2,
 };
 
 #define MSM_SHARED_RAM_PHYS 0x80000000

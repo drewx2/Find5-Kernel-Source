@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -98,7 +98,6 @@ static struct adreno_device device_3d0 = {
 			.irq_name = KGSL_3D0_IRQ,
 		},
 		.iomemname = KGSL_3D0_REG_MEMORY,
-		.shadermemname = KGSL_3D0_SHADER_MEMORY,
 		.ftbl = &adreno_functable,
 #ifdef CONFIG_HAS_EARLYSUSPEND
 		.display_off = {
@@ -127,17 +126,11 @@ static struct adreno_device device_3d0 = {
  */
 unsigned int hang_detect_regs[] = {
 	A3XX_RBBM_STATUS,
-	REG_CP_RB_RPTR,   /* LONG_IB_DETECT_REG_INDEX_START */
+	REG_CP_RB_RPTR,
 	REG_CP_IB1_BASE,
 	REG_CP_IB1_BUFSZ,
 	REG_CP_IB2_BASE,
-	REG_CP_IB2_BUFSZ, /* LONG_IB_DETECT_REG_INDEX_END */
-	0,
-	0,
-	0,
-	0,
-	0,
-	0
+	REG_CP_IB2_BUFSZ,
 };
 
 const unsigned int hang_detect_regs_count = ARRAY_SIZE(hang_detect_regs);
@@ -199,10 +192,10 @@ static const struct {
 		"a300_pm4.fw", "a300_pfp.fw", &adreno_a3xx_gpudev,
 		512, 0, 2, SZ_256K, 0x3FF037, 0x3FF016 },
 	/* A3XX doesn't use the pix_shader_start */
-	{ ADRENO_REV_A320, 3, 2, ANY_ID, ANY_ID,
+	{ ADRENO_REV_A320, 3, 2, 0, ANY_ID,
 		"a300_pm4.fw", "a300_pfp.fw", &adreno_a3xx_gpudev,
 		512, 0, 2, SZ_512K, 0x3FF037, 0x3FF016 },
-	{ ADRENO_REV_A330, 3, 3, 0, ANY_ID,
+	{ ADRENO_REV_A330, 3, 3, 0, 0,
 		"a330_pm4.fw", "a330_pfp.fw", &adreno_a3xx_gpudev,
 		512, 0, 2, SZ_1M, NO_VER, NO_VER },
 	{ ADRENO_REV_A305B, 3, 0, 5, 0x10,

@@ -56,17 +56,6 @@ typedef enum {
 	MAX_PHYS_TARGET_NUM,
 } DISP_TARGET_PHYS;
 
-/* OPPO 2012-11-30 huyu modify for play video crash*/
-#ifdef CONFIG_VENDOR_EDIT		
-
-enum {
-	BLT_SWITCH_TG_OFF,
-	BLT_SWITCH_TG_ON
-};
-	
-#endif
-/* OPPO 2012-11-30 huyu modify for play video crash*/
-
 /* panel info type */
 struct lcd_panel_info {
 	__u32 vsync_enable;
@@ -76,12 +65,7 @@ struct lcd_panel_info {
 	__u32 v_pulse_width;
 	__u32 hw_vsync_mode;
 	__u32 vsync_notifier_period;
-/* OPPO 2012-11-30 huyu modify for play video crash*/
-#ifdef CONFIG_VENDOR_EDIT	
 	__u32 blt_ctrl;
-
-#endif
-/* OPPO 2012-11-30 huyu modify for play video crash*/
 	__u32 rev;
 };
 
@@ -206,6 +190,7 @@ struct msm_fb_panel_data {
 	void (*set_rect) (int x, int y, int xres, int yres);
 	void (*set_vsync_notifier) (msm_fb_vsync_handler_type, void *arg);
 	void (*set_backlight) (struct msm_fb_data_type *);
+	int (*get_backlight_on_status) (void);
 
 	/* function entry chain */
 	int (*on) (struct platform_device *pdev);

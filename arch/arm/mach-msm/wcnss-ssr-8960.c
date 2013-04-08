@@ -30,8 +30,6 @@
 #define MODULE_NAME			"wcnss_8960"
 #define MAX_BUF_SIZE			0x51
 
-
-
 static struct delayed_work cancel_vote_work;
 static void *riva_ramdump_dev;
 static int riva_crash;

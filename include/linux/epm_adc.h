@@ -26,6 +26,7 @@ struct epm_chan_request {
 	int32_t physical;
 };
 
+#ifdef __KERNEL__
 struct epm_chan_properties {
 	uint32_t resistorValue;
 	uint32_t gain;
@@ -41,6 +42,7 @@ struct epm_adc_platform_data {
 	uint32_t bus_id;
 	uint32_t gpio_expander_base_addr;
 };
+#endif
 
 #define EPM_ADC_IOCTL_CODE		0x91
 
