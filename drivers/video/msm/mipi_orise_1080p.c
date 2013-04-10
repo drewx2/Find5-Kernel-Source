@@ -48,6 +48,9 @@ extern int mipi_dsi_on(struct platform_device *pdev);
 
 static struct mipi_dsi_panel_platform_data *mipi_orise_pdata;
 
+// gamma control
+struct dsi_cmd_desc power_on_set[15];
+
 static struct dsi_buf orise_tx_buf;
 static struct dsi_buf orise_rx_buf;
 
@@ -383,8 +386,10 @@ static int mipi_orise_lcd_on(struct platform_device *pdev)
 				ARRAY_SIZE(cmd_mipi_resume_sequence));
 		}
 		else{
-			mipi_dsi_cmds_tx(&orise_tx_buf, cmd_mipi_initial_sequence,
-				ARRAY_SIZE(cmd_mipi_initial_sequence));
+		  /*mipi_dsi_cmds_tx(&orise_tx_buf, cmd_mipi_initial_sequence,
+		    ARRAY_SIZE(cmd_mipi_initial_sequence));*/
+		        mipi_dsi_cmds_tx(&orise_tx_buf, power_on_set,
+		           ARRAY_SIZE(power_on_set));
 			printk("huyu-------%s: lcd ESD reset initial!\n",__func__);
 			mdelay(130);
 			//printk("huyu-------%s: lcd cmd_brightness_setting!\n",__func__);
@@ -404,8 +409,10 @@ static int mipi_orise_lcd_on(struct platform_device *pdev)
 	}
 	else{
 		//printk("huyu-------%s: lcd initial!\n",__func__);
-		mipi_dsi_cmds_tx(&orise_tx_buf, cmd_mipi_initial_sequence,
-			ARRAY_SIZE(cmd_mipi_initial_sequence));
+		/*mipi_dsi_cmds_tx(&orise_tx_buf, cmd_mipi_initial_sequence,
+			ARRAY_SIZE(cmd_mipi_initial_sequence));*/
+		mipi_dsi_cmds_tx(&orise_tx_buf, power_on_set,
+		           ARRAY_SIZE(power_on_set));
 		//printk("huyu-------%s: lcd initial!\n",__func__);
 		mdelay(130);
 		//printk("huyu-------%s: lcd cmd_brightness_setting!\n",__func__);
@@ -613,6 +620,152 @@ static void techeck_work_func( struct work_struct *work )
 	schedule_delayed_work(&techeck_work, msecs_to_jiffies(2000));
 }
 
+/******************* begin sysfs interface *******************/
+
+static ssize_t kgamma_r_store(struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t count)
+{
+	int kgamma[25];
+	int i;
+
+	sscanf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		&kgamma[0], &kgamma[1], &kgamma[2], &kgamma[3],
+		&kgamma[4], &kgamma[5], &kgamma[6], &kgamma[7],
+	        &kgamma[8], &kgamma[9], &kgamma[10], &kgamma[11], &kgamma[12], &kgamma[13],
+		&kgamma[14], &kgamma[15], &kgamma[16], &kgamma[17],
+	        &kgamma[18], &kgamma[19], &kgamma[20], &kgamma[21], &kgamma[22], &kgamma[23],
+		&kgamma[24]);
+
+	for (i=0; i<25; i++) {
+		pr_info("kgamma_r [%d] => %d \n", i, kgamma[i]);
+		// Don't actually set it yet
+		//power_on_set[4].payload[i] = kgamma[i];
+	}
+
+	return count;
+}
+
+static ssize_t kgamma_r_show(struct device *dev, struct device_attribute *attr,
+								char *buf)
+{
+	int kgamma[25];
+	int i;
+
+	for (i=0; i<25; i++)
+		kgamma[i] = power_on_set[4].payload[i];
+
+	return sprintf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		kgamma[0], kgamma[1], kgamma[2], kgamma[3],
+		kgamma[4], kgamma[5], kgamma[6], kgamma[7],
+	        kgamma[8], kgamma[9], kgamma[10], kgamma[11], kgamma[12], kgamma[13],
+		kgamma[14], kgamma[15], kgamma[16], kgamma[17],
+	        kgamma[18], kgamma[19], kgamma[20], kgamma[21], kgamma[22], kgamma[23],
+		kgamma[24]);
+}
+
+static ssize_t kgamma_g_store(struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t count)
+{
+        int kgamma[25];
+	int i;
+
+	sscanf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		&kgamma[0], &kgamma[1], &kgamma[2], &kgamma[3],
+		&kgamma[4], &kgamma[5], &kgamma[6], &kgamma[7],
+	        &kgamma[8], &kgamma[9], &kgamma[10], &kgamma[11], &kgamma[12], &kgamma[13],
+		&kgamma[14], &kgamma[15], &kgamma[16], &kgamma[17],
+	        &kgamma[18], &kgamma[19], &kgamma[20], &kgamma[21], &kgamma[22], &kgamma[23],
+		&kgamma[24]);
+
+	for (i=0; i<25; i++) {
+		pr_info("kgamma_r [%d] => %d \n", i, kgamma[i]);
+		// Don't actually set it yet
+		//power_on_set[5].payload[i] = kgamma[i];
+	}
+
+	return count;
+}
+
+static ssize_t kgamma_g_show(struct device *dev, struct device_attribute *attr,
+								char *buf)
+{
+        int kgamma[25];
+	int i;
+
+	for (i=0; i<25; i++)
+		kgamma[i] = power_on_set[5].payload[i];
+
+	return sprintf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		kgamma[0], kgamma[1], kgamma[2], kgamma[3],
+		kgamma[4], kgamma[5], kgamma[6], kgamma[7],
+	        kgamma[8], kgamma[9], kgamma[10], kgamma[11], kgamma[12], kgamma[13],
+		kgamma[14], kgamma[15], kgamma[16], kgamma[17],
+	        kgamma[18], kgamma[19], kgamma[20], kgamma[21], kgamma[22], kgamma[23],
+		kgamma[24]);
+}
+
+static ssize_t kgamma_b_store(struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t count)
+{ 
+        int kgamma[25];
+	int i;
+
+	sscanf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		&kgamma[0], &kgamma[1], &kgamma[2], &kgamma[3],
+		&kgamma[4], &kgamma[5], &kgamma[6], &kgamma[7],
+	        &kgamma[8], &kgamma[9], &kgamma[10], &kgamma[11], &kgamma[12], &kgamma[13],
+		&kgamma[14], &kgamma[15], &kgamma[16], &kgamma[17],
+	        &kgamma[18], &kgamma[19], &kgamma[20], &kgamma[21], &kgamma[22], &kgamma[23],
+		&kgamma[24]);
+
+	for (i=0; i<25; i++) {
+		pr_info("kgamma_r [%d] => %d \n", i, kgamma[i]);
+		// Don't actually set it yet
+		//power_on_set[6].payload[i] = kgamma[i];
+	}
+
+	return count;
+}
+
+static ssize_t kgamma_b_show(struct device *dev, struct device_attribute *attr,
+								char *buf)
+{ 
+        int kgamma[25];
+	int i;
+
+	for (i=0; i<25; i++)
+		kgamma[i] = power_on_set[6].payload[i];
+
+	return sprintf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		kgamma[0], kgamma[1], kgamma[2], kgamma[3],
+		kgamma[4], kgamma[5], kgamma[6], kgamma[7],
+	        kgamma[8], kgamma[9], kgamma[10], kgamma[11], kgamma[12], kgamma[13],
+		kgamma[14], kgamma[15], kgamma[16], kgamma[17],
+	        kgamma[18], kgamma[19], kgamma[20], kgamma[21], kgamma[22], kgamma[23],
+		kgamma[24]);
+}
+
+static ssize_t kgamma_ctrl_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return count;
+}
+
+static ssize_t kgamma_ctrl_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static DEVICE_ATTR(kgamma_r, 0644, kgamma_r_show, kgamma_r_store);
+static DEVICE_ATTR(kgamma_g, 0644, kgamma_g_show, kgamma_g_store);
+static DEVICE_ATTR(kgamma_b, 0644, kgamma_b_show, kgamma_b_store);
+static DEVICE_ATTR(kgamma_ctrl, 0644, kgamma_ctrl_show, kgamma_ctrl_store);
+
+/******************* end sysfs interface *******************/
+
+
+
 static int __devinit mipi_orise_lcd_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
@@ -621,7 +774,6 @@ static int __devinit mipi_orise_lcd_probe(struct platform_device *pdev)
 	static struct mipi_dsi_phy_ctrl *phy_settings;
 	int rc = 0;
 	
-	
 	if (pdev->id == 0) {
 		mipi_orise_pdata = pdev->dev.platform_data;
 
@@ -629,6 +781,7 @@ static int __devinit mipi_orise_lcd_probe(struct platform_device *pdev)
 			&& mipi_orise_pdata->phy_ctrl_settings) {
 			phy_settings = (mipi_orise_pdata->phy_ctrl_settings);
 		}
+
 		return 0;
 	}
 
@@ -646,7 +799,23 @@ static int __devinit mipi_orise_lcd_probe(struct platform_device *pdev)
 		if (phy_settings != NULL)
 			mipi->dsi_phy_db = phy_settings;
 	}
+
+	// make a copy of platform data, initialize them
+	memcpy((void*)power_on_set, (void*)cmd_mipi_initial_sequence, sizeof(power_on_set));
 	
+	rc = device_create_file(&pdev->dev, &dev_attr_kgamma_r);
+	if(rc !=0)
+	  return -1;
+	rc = device_create_file(&pdev->dev, &dev_attr_kgamma_g);
+	if(rc !=0)
+	  return -1;
+	rc = device_create_file(&pdev->dev, &dev_attr_kgamma_b);
+	if(rc !=0)
+	  return -1;
+	rc = device_create_file(&pdev->dev, &dev_attr_kgamma_ctrl);
+	if(rc !=0)
+	  return -1;
+
 
 	rc = gpio_request(MIPI_STOD13_EN, "MIPI_STOD13_EN#");
 	if (rc < 0) {
@@ -764,6 +933,7 @@ err_device_put:
 	platform_device_put(pdev);
 	return ret;
 }
+
 static int __init mipi_orise_lcd_init(void)
 {
 	mipi_dsi_buf_alloc(&orise_tx_buf, DSI_BUF_SIZE);
@@ -781,5 +951,3 @@ static int __init mipi_orise_lcd_init(void)
 }
 
 module_init(mipi_orise_lcd_init);
-
-

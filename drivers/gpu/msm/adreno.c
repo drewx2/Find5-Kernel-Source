@@ -119,10 +119,6 @@ static struct adreno_device device_3d0 = {
  * If the values of these registers are same after
  * KGSL_TIMEOUT_PART time, GPU hang is reported in
  * kernel log.
- * *****ALERT******ALERT********ALERT*************
- * Order of registers below is important, registers
- * from LONG_IB_DETECT_REG_INDEX_START to
- * LONG_IB_DETECT_REG_INDEX_END are used in long ib detection.
  */
 unsigned int hang_detect_regs[] = {
 	A3XX_RBBM_STATUS,
@@ -156,10 +152,10 @@ static const struct {
 	/* size of gmem for gpu*/
 	unsigned int gmem_size;
 	/* version of pm4 microcode that supports sync_lock
-	   between CPU and GPU for IOMMU-v0 programming */
+	   between CPU and GPU for SMMU-v1 programming */
 	unsigned int sync_lock_pm4_ver;
 	/* version of pfp microcode that supports sync_lock
-	   between CPU and GPU for IOMMU-v0 programming */
+	   between CPU and GPU for SMMU-v1 programming */
 	unsigned int sync_lock_pfp_ver;
 } adreno_gpulist[] = {
 	{ ADRENO_REV_A200, 0, 2, ANY_ID, ANY_ID,
@@ -198,9 +194,6 @@ static const struct {
 	{ ADRENO_REV_A330, 3, 3, 0, 0,
 		"a330_pm4.fw", "a330_pfp.fw", &adreno_a3xx_gpudev,
 		512, 0, 2, SZ_1M, NO_VER, NO_VER },
-	{ ADRENO_REV_A305B, 3, 0, 5, 0x10,
-		"a330_pm4.fw", "a330_pfp.fw", &adreno_a3xx_gpudev,
-		512, 0, 2, SZ_128K, NO_VER, NO_VER },
 };
 
 static irqreturn_t adreno_irq_handler(struct kgsl_device *device)
@@ -287,7 +280,7 @@ static void adreno_iommu_setstate(struct kgsl_device *device,
 					uint32_t flags)
 {
 	unsigned int pt_val, reg_pt_val;
-	unsigned int link[230];
+	unsigned int link[250];
 	unsigned int *cmds = &link[0];
 	int sizedwords = 0;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);

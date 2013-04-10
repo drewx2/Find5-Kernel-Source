@@ -3,7 +3,7 @@ obj-y += mdss/
 else
 obj-y := msm_fb.o
 
-obj-$(CONFIG_FB_MSM_LOGO) += logo.o
+obj-y += logo.o
 obj-$(CONFIG_FB_BACKLIGHT) += msm_fb_bl.o
 
 ifeq ($(CONFIG_FB_MSM_MDP_HW),y)

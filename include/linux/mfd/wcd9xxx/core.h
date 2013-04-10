@@ -144,7 +144,6 @@ struct wcd9xxx {
 	int (*write_dev)(struct wcd9xxx *wcd9xxx, unsigned short reg,
 			 int bytes, void *src, bool interface_reg);
 
-	u32 num_of_supplies;
 	struct regulator_bulk_data *supplies;
 
 	enum wcd9xxx_pm_state pm_state;
@@ -156,11 +155,6 @@ struct wcd9xxx {
 
 	int num_rx_port;
 	int num_tx_port;
-
-	u8 idbyte_0;
-	u8 idbyte_1;
-	u8 idbyte_2;
-	u8 idbyte_3;
 };
 
 int wcd9xxx_reg_read(struct wcd9xxx *wcd9xxx, unsigned short reg);

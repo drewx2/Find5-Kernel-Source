@@ -411,21 +411,8 @@ static struct platform_device wfd_device = {
 static bool dsi_power_on;
 static int mipi_dsi_panel_power(int on)
 {
-#if 0
-	/* OPPO 2012-08-31 zhengzk Modify begin for LCD */
-#ifdef CONFIG_1080P_LCD	//lcd 1080p
-	static struct regulator *reg_lvs7, *reg_l2, *reg_l11, *reg_ext_3p3v;
-	static int gpio36, gpio25, gpio26, mpp3;
-#else	//lcd 720p
 	static struct regulator *reg_lvs7, *reg_l2, *reg_l11, *reg_l22, *reg_ext_3p3v;
 	static int gpio36, gpio25, gpio26, mpp3;
-#endif
-	/* OPPO 2012-08-31 zhengzk Modify end */
-#else 
-	//OPPO 2012-10-23 huyu add for lcd compatible
-	static struct regulator *reg_lvs7, *reg_l2, *reg_l11, *reg_l22, *reg_ext_3p3v;
-	static int gpio36, gpio25, gpio26, mpp3;
-#endif
 	int rc;
 
 	pr_debug("%s: on=%d\n", __func__, on);

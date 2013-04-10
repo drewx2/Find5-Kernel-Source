@@ -71,7 +71,6 @@ enum adreno_gpurev {
 	ADRENO_REV_A305 = 305,
 	ADRENO_REV_A320 = 320,
 	ADRENO_REV_A330 = 330,
-	ADRENO_REV_A305B = 335,
 };
 
 struct adreno_gpudev;
