@@ -19,9 +19,7 @@ void __msm_gpio_set_inout(unsigned gpio, unsigned val);
 void __msm_gpio_set_config_direction(unsigned gpio, int input, int val);
 void __msm_gpio_set_polarity(unsigned gpio, unsigned val);
 unsigned __msm_gpio_get_intr_status(unsigned gpio);
-//wjp test for cr400562
 unsigned __msm_gpio_get_intr_cfg_enable(unsigned gpio);
-//wjp test for cr400562
 void __msm_gpio_set_intr_status(unsigned gpio);
 unsigned __msm_gpio_get_intr_config(unsigned gpio);
 void __msm_gpio_set_intr_cfg_enable(unsigned gpio, unsigned val);
