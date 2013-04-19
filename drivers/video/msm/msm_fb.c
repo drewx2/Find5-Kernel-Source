@@ -1160,11 +1160,7 @@ static struct fb_ops msm_fb_ops = {
 	.owner = THIS_MODULE,
 	.fb_open = msm_fb_open,
 	.fb_release = msm_fb_release,
-#ifdef CONFIG_LGE_DISP_FBREAD
-	.fb_read = msm_fb_read,
-#else
 	.fb_read = NULL,
-#endif
 	.fb_write = NULL,
 	.fb_cursor = NULL,
 	.fb_check_var = msm_fb_check_var,	/* vinfo check */
