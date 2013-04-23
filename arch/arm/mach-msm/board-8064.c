@@ -549,7 +549,10 @@ static struct memtype_reserve apq8064_reserve_table[] __initdata = {
 static void __init reserve_rtb_memory(void)
 {
 #if defined(CONFIG_MSM_RTB)
-	apq8064_reserve_table[MEMTYPE_EBI1].size += apq8064_rtb_pdata.size;
+/* OPPO 2003-01-17 Van modified begin for FTM test no need rtb_memory */
+	if (!strstr(boot_command_line,"oppo_ftm_mode=factory2"))
+		apq8064_reserve_table[MEMTYPE_EBI1].size += apq8064_rtb_pdata.size;
+/* OPPO 2003-01-17 Van modified end for FTM test no need rtb_memory */
 #endif
 }
 
