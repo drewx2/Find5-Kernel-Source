@@ -1243,11 +1243,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		apq8064_hs_detect_use_gpio = 1;
 	}
 
-	/*OPPO 2012-07-27 zhzhyon Add for use gpio detect*/
-	#ifdef CONFIG_VENDOR_EDIT
 	apq8064_hs_detect_use_gpio = 1;
-	#endif
-	/*OPPO 2012-07-27 zhzhyon Add end*/
 	if (apq8064_hs_detect_use_gpio == 1) 
 	{
 		pr_debug("%s: Using MBHC mechanical switch\n", __func__);
@@ -1581,7 +1577,6 @@ static struct snd_soc_ops msm_slimbus_2_be_ops = {
 	.hw_params = msm_slimbus_2_hw_params,
 	.shutdown = msm_shutdown,
 };
-
 
 /* Digital audio interface glue - connects codec <---> CPU */
 static struct snd_soc_dai_link msm_dai[] = {
@@ -2036,7 +2031,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 	},
 };
 
-struct snd_soc_card snd_soc_card_msm = {
+static struct snd_soc_card snd_soc_card_msm = {
 	.name		= "apq8064-tabla-snd-card",
 	.dai_link	= msm_dai,
 	.num_links	= ARRAY_SIZE(msm_dai),
