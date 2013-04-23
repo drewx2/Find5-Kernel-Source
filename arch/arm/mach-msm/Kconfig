@@ -429,6 +429,11 @@ config VENDOR_EDIT
 	bool "VENDOR_EDIT"
 	default y
 #/* OPPO 2012-11-13 zwx Add end */
+
+config DEVICE_FIND5
+	bool "DEVICE_FIND5"
+	default y
+
 config MACH_HALIBUT
 	depends on ARCH_MSM7X01A
 	depends on MSM_STACKED_MEMORY
