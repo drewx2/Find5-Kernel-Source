@@ -23,15 +23,11 @@
 
 #include <linux/irq.h>
 #include <asm/system.h>
-#ifdef CONFIG_VENDOR_EDIT
-#include <linux/delay.h>
-#endif
+
 #define fb_width(fb)	((fb)->var.xres)
 #define fb_height(fb)	((fb)->var.yres)
 #define fb_size(fb)	((fb)->var.xres * (fb)->var.yres * 2)
-#ifdef CONFIG_VENDOR_EDIT
-#define fb_bpp(fb) ((fb)->var.bits_per_pixel)
-#endif
+
 static void memset16(void *_ptr, unsigned short val, unsigned count)
 {
 	unsigned short *ptr = _ptr;
@@ -39,16 +35,7 @@ static void memset16(void *_ptr, unsigned short val, unsigned count)
 	while (count--)
 		*ptr++ = val;
 }
-#ifdef CONFIG_VENDOR_EDIT
-static void memset32(void *_ptr, unsigned int val, unsigned count)
-{
-	unsigned int *ptr = _ptr;
-	count >>= 2;
-	while (count--)
-		*ptr++ = val;
-}
 
-#endif
 /* 565RLE image format: [count(2 bytes), rle(2 bytes)] */
 int load_565rle_image(char *filename, bool bf_supported)
 {
@@ -56,9 +43,7 @@ int load_565rle_image(char *filename, bool bf_supported)
 	int fd, count, err = 0;
 	unsigned max;
 	unsigned short *data, *bits, *ptr;
-#ifdef CONFIG_VENDOR_EDIT
-    unsigned int rgb32, red, green, blue, alpha;
-#endif
+
 	info = registered_fb[0];
 	if (!info) {
 		printk(KERN_WARNING "%s: Can not access framebuffer\n",
@@ -77,9 +62,6 @@ int load_565rle_image(char *filename, bool bf_supported)
 		err = -EIO;
 		goto err_logo_close_file;
 	}
-	printk("huyu----------%s: count = %d\n", __func__, count);
-	printk("huyu----------%s: fb_bpp(info) = %d\n", __func__, fb_bpp(info));
-	printk("huyu----------%s: yoffset = %d\n", __func__, info->var.yoffset);
 	sys_lseek(fd, (off_t)0, 0);
 	data = kmalloc(count, GFP_KERNEL);
 	if (!data) {
@@ -92,7 +74,6 @@ int load_565rle_image(char *filename, bool bf_supported)
 		goto err_logo_free_data;
 	}
 
-	printk("huyu----------%s: fb_width = %d  fb_height = %d\n", __func__, fb_width(info),fb_height(info));
 	max = fb_width(info) * fb_height(info);
 	ptr = data;
 	if (bf_supported && (info->node == 1 || info->node == 2)) {
@@ -102,7 +83,6 @@ int load_565rle_image(char *filename, bool bf_supported)
 		goto err_logo_free_data;
 	}
 	bits = (unsigned short *)(info->screen_base);
-#ifndef CONFIG_VENDOR_EDIT
 	while (count > 3) {
 		unsigned n = ptr[0];
 		if (n > max)
@@ -113,36 +93,7 @@ int load_565rle_image(char *filename, bool bf_supported)
 		ptr += 2;
 		count -= 4;
 	}
-#else
-	while (count > 3) {
-		unsigned n = ptr[0];
-		if (n > max)
-			break;
-		if (fb_bpp(info) == 16) {
-			memset16(bits, ptr[1], n << 1);
-			bits += n;
-		} else if (fb_bpp(info) == 32) {
-	        /* convert 16 bits to 32 bits */
-	        rgb32 = ((ptr[1] >> 11) & 0x1F);
-	        red = (rgb32 << 3) | (rgb32 >> 2);
-	        rgb32 = ((ptr[1] >> 5) & 0x3F);
-	        green = (rgb32 << 2) | (rgb32 >> 4);
-	        rgb32 = ((ptr[1]) & 0x1F);
-	        blue = (rgb32 << 3) | (rgb32 >> 2);
-	        alpha = 0xff;
-	        rgb32 = (alpha << 24) | (blue << 16)
-	        | (green << 8) | (red);
-			//printk("huyu----------%s: red = %x  green = %x  blue = %x\n", __func__, red,green,blue);
-	        memset32(bits, rgb32, n << 2);
-			//printk("huyu----------%s: rgb32 = %x  n << 2 = %d\n", __func__, rgb32,n << 2);
-	        bits += (n * 2);
-		}
-		max -= n;
-		ptr += 2;
-		count -= 4;
-	}
 
-#endif
 err_logo_free_data:
 	kfree(data);
 err_logo_close_file:
