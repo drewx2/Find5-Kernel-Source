@@ -93,6 +93,7 @@ void panic(const char *fmt, ...)
 	local_irq_disable();
 
 /* OPPO 2012-10-11 chendx Add begin for debug tools */
+#ifdef CONFIG_OPPO_DEBUG_ASSERT
     pr_info("kernel panic because of %s\n", fmt);
 
 	if(!is_otrace_on()) {
@@ -103,6 +104,7 @@ void panic(const char *fmt, ...)
     	else
         	kernel_restart("kernel");
 	}
+#endif
 /* OPPO 2012-10-11 chendx Add end */
 
 
