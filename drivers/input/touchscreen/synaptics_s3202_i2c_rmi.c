@@ -52,8 +52,6 @@
 #include "synaptics_firmware_truly.h"
 #include "synaptics_firmware_wintek.h"
 #include "synaptics_firmware_tpk.h"
-#define TP_UPDATE_RLE_FILE	"tpupdate.rle"
-extern int display_rle_file(char *filename);
 
 #include "synaptics_test_rawdata.h"
 
@@ -1635,7 +1633,6 @@ firmware_update:
 			|| (ts->version[2] != ((fw_update_version>>8)&0xFF)
 				|| ts->version[3] < (fw_update_version&0xFF))))
 		{
-			display_rle_file(TP_UPDATE_RLE_FILE);
 			CompleteReflash(client, fw_update_data);
 			goto detect_device;
 		}
