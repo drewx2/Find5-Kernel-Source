@@ -5743,6 +5743,16 @@ static struct clk_lookup msm_clocks_8960[] = {
 	CLK_LOOKUP("q6sw_clk",		q6sw_clk,     ""),
 	CLK_LOOKUP("q6fw_clk",		q6fw_clk,     ""),
 	CLK_LOOKUP("q6_func_clk",	q6_func_clk,  ""),
+	CLK_LOOKUP("rot_iommu_clk",	rot_axi_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("mdp_iommu_clk", mdp_axi_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_a_clk.c, "msm_rotator.0"),
+	CLK_LOOKUP("vcodec_iommu1_clk", vcodec_axi_b_clk.c, "msm_rotator.0"),
+	CLK_LOOKUP("smmu_iface_clk", smmu_p_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("rot_iommu_clk",	rot_axi_clk.c,	"mdp.0"),
+	CLK_LOOKUP("mdp_iommu_clk", mdp_axi_clk.c,	"mdp.0"),
+	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_a_clk.c, "mdp.0"),
+	CLK_LOOKUP("vcodec_iommu1_clk", vcodec_axi_b_clk.c, "mdp.0"),
+	CLK_LOOKUP("smmu_iface_clk", smmu_p_clk.c,	"mdp.0"),
 };
 
 static struct clk_lookup msm_clocks_8930[] = {
@@ -6045,6 +6055,17 @@ static struct clk_lookup msm_clocks_8930[] = {
 	CLK_LOOKUP("q6sw_clk",		q6sw_clk,     ""),
 	CLK_LOOKUP("q6fw_clk",		q6fw_clk,     ""),
 	CLK_LOOKUP("q6_func_clk",	q6_func_clk,  ""),
+
+	CLK_LOOKUP("rot_iommu_clk",	rot_axi_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("mdp_iommu_clk", mdp_axi_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_a_clk.c, "msm_rotator.0"),
+	CLK_LOOKUP("vcodec_iommu1_clk", vcodec_axi_b_clk.c, "msm_rotator.0"),
+	CLK_LOOKUP("smmu_iface_clk", smmu_p_clk.c,	"msm_rotator.0"),
+	CLK_LOOKUP("rot_iommu_clk",	rot_axi_clk.c,	"mdp.0"),
+	CLK_LOOKUP("mdp_iommu_clk", mdp_axi_clk.c,	"mdp.0"),
+	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_a_clk.c, "mdp.0"),
+	CLK_LOOKUP("vcodec_iommu1_clk", vcodec_axi_b_clk.c, "mdp.0"),
+	CLK_LOOKUP("smmu_iface_clk", smmu_p_clk.c,	"mdp.0"),
 };
 /*
  * Miscellaneous clock register initializations
